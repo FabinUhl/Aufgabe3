@@ -9,20 +9,23 @@
 #include <time.h>
 #include "turtlebot_highlevel_controller/TurtlebotHighlevelController.hpp"
 #include <string>
+#include <stdbool.h>
 #include <geometry_msgs/Twist.h>
+#include <nav_msgs/Odometry.h>
+#include<geometry_msgs/PointStamped.h>
+#include<visualization_msgs/Marker.h>
 
 sensor_msgs::LaserScan Pub_scan;
-
+nav_msgs::Odometry globalOdomFrame;
+geometry_msgs::PointStamped sauele_robo;
 float SizeOfArray;
 double ranges[5];
-
 geometry_msgs::Twist base_cmd_turn_left;
-
+ 
 namespace HighlevelController {
 
 TurtlebotHighlevelController::TurtlebotHighlevelController(ros::NodeHandle& nodeHandle): nodeHandle_(nodeHandle)
 {
-  
   int queue_size;
   std::string topic;
   if(!nodeHandle.getParam("/queue_size", queue_size))
@@ -35,23 +38,20 @@ TurtlebotHighlevelController::TurtlebotHighlevelController(ros::NodeHandle& node
       ROS_ERROR_STREAM("topic wurde nicht gelesen.");
       ros::requestShutdown();
   }
-  
-  ros::Subscriber subscriber = nodeHandle_.subscribe(topic, queue_size, &TurtlebotHighlevelController::chatterCallback, this);
-  publisher_ = nodeHandle_.advertise<sensor_msgs::LaserScan>("Pub_scan", queue_size);
-  cmd_vel_pub_ = nodeHandle_.advertise<geometry_msgs::Twist>("cmd_vel", 100);
-   //ros::Publisher cmd_vel_pub_ = nodeHandle_.advertise<geometry_msgs::Twist>("cmd_vel", 10);
 
+  
+  ros::Subscriber subscriber = nodeHandle.subscribe(topic, queue_size, &TurtlebotHighlevelController::chatterCallback, this);
+  odom_subscriber_ = nodeHandle.subscribe("odom", queue_size, &TurtlebotHighlevelController::odomCallback, this);
+
+  publisher_ = nodeHandle.advertise<sensor_msgs::LaserScan>("Pub_scan", queue_size);
+  cmd_vel_pub_ = nodeHandle.advertise<geometry_msgs::Twist>("cmd_vel", 100);
+  vis_pub_ = nodeHandle.advertise<visualization_msgs::Marker>("Marker_Saeule", 0 );
 
   ROS_INFO("Successfully launched node.");
 
-  ros::Rate r(10); // 100 hz
+  ros::Rate r(10); // 10 hz
   while (ros::ok())
   {
-   //publisher_.publish(Pub_scan);
-    
-   //cmd_vel_pub_.publish(base_cmd);
-    //cmd_vel_pub_.publish(msg1);`
-
     ros::spinOnce();
     r.sleep();
   }
@@ -71,11 +71,15 @@ void TurtlebotHighlevelController::topicCallback(const sensor_msgs::Temperature&
   //algorithm_.addData(message.temperature);
 }
 
+void TurtlebotHighlevelController::odomCallback(const nav_msgs::Odometry odomFrame)
+{
+  globalOdomFrame = odomFrame;
+}
+
 void TurtlebotHighlevelController::chatterCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
-  //ros::Publisher cmd_vel_pub;
+
   SizeOfArray = msg->ranges.size();
-  //msg->ranges->resize(SizeOfArray);
   Pub_scan.ranges.resize(5);
   float AusgabeSubscriber[5];
   unsigned int index;
@@ -126,19 +130,19 @@ void TurtlebotHighlevelController::chatterCallback(const sensor_msgs::LaserScan:
       Pub_scan.ranges[2]   = msg->ranges[index];
       AusgabeSubscriber[2] = msg->ranges[index];
 
-  //ROS_INFO("Distanzen: [%f], [%f], [%f], [%f], [%f]", Pub_scan.ranges[0],Pub_scan.ranges[1],Pub_scan.ranges[2],Pub_scan.ranges[3],Pub_scan.ranges[4]);
   ROS_INFO("Distanzen: [%f], [%f], [%f], [%f], [%f]", AusgabeSubscriber[0],AusgabeSubscriber[1],AusgabeSubscriber[2],AusgabeSubscriber[3],AusgabeSubscriber);
 
+ 
+
+
   /*
-      //ros::Rate r(1.0);
     ros::Time scan_time = ros::Time::now();
     publisher_msg.header.stamp = scan_time;
     publisher_msg.header.frame_id = "base_laser_link";    
- */   
+  */   
     Pub_scan.header.stamp = msg->header.stamp;
     Pub_scan.header.frame_id = msg->header.frame_id;
 
-    // +/- 90°:
     //Pub_scan.angle_increment = 0.00158417993225;
     Pub_scan.angle_increment = msg->angle_increment;
 
@@ -149,18 +153,69 @@ void TurtlebotHighlevelController::chatterCallback(const sensor_msgs::LaserScan:
     Pub_scan.range_min = msg->range_min;
     Pub_scan.range_max = msg->range_max;
 
+  // Position der Säule:
+  float alpha;
+  float distance;
+  alpha = (msg->angle_min + index *Pub_scan.angle_increment)*360/2/3.1416;
+  distance = Pub_scan.ranges[2];
 
-
+  // Fahrt zur Säule:
   geometry_msgs::Twist base_cmd;
-  base_cmd.linear.x = 1;
-  base_cmd.linear.y =0.6;
-  base_cmd.linear.z=0;
-  base_cmd.angular.x = 1.2;
+  base_cmd.linear.x = 0.5;
+  base_cmd.linear.y = 0.0;
+  base_cmd.linear.z = 0.0;
+  base_cmd.angular.x = 0.0;
+  base_cmd.angular.y = 0.0; 
+  if (distance < 5 && distance > 0)
+  {
+    base_cmd.angular.z = alpha * 0.1;
+  }
+  else
+  {
+    base_cmd.angular.z = 0.0;
+  }
+ //Hier werden die Pfeilerposition aus der Robosicht angegeben
+  sauele_robo.header.frame_id = "base_laser_link";
+  sauele_robo.header.stamp = ros::Time();
+  sauele_robo.point.x = (cos(alpha)*distance);
+  sauele_robo.point.y = (sin(alpha)*distance);
+  sauele_robo.point.z = 0;
 
+
+
+//Hier kommen die Marker
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "odom";
+    marker.header.stamp = ros::Time();
+    marker.ns = "HighlevelController";
+    marker.id = 1;
+    marker.type = visualization_msgs::Marker::SPHERE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.pose.position.x = sauele_robo.point.x;
+    marker.pose.position.y = sauele_robo.point.y;
+    marker.pose.position.z = sauele_robo.point.z;
+    marker.pose.orientation.x = 0.0;
+    marker.pose.orientation.y = 0.0;
+    marker.pose.orientation.z = 0.0;
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = 1;
+    marker.scale.y = 0.1;
+    marker.scale.z = 0.1;
+    marker.color.a = 1.0; // Don't forget to set the alpha!
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+    //only if using a MESH_RESOURCE marker type:
+    //marker.mesh_resource = "package://pr2_description/meshes/base_v0/base.dae";
+    
+
+
+
+  ROS_INFO("alpha, distance, base_cmd.angular.z: [%f], [%f], [%f]", alpha, distance, base_cmd.angular.z);
   
-  //publisher.publish(base_cmd);
   cmd_vel_pub_.publish(base_cmd);
   publisher_.publish(Pub_scan);
+  vis_pub_.publish(marker);
 }
 }
 

@@ -34,7 +34,7 @@
     <param name="base_watchdog_timeout" value="0.5"/>
     <remap from="odom" to="odom"/>
     <remap from="base_pose_ground_truth" to="base_pose_ground_truth"/>
-    <remap from="cmd_vel" to="cmd_vel_mux/input/teleop"/>
+    <remap from="turtlebot_highlevel_controller_node/cmd_vel_pub_" to="cmd_vel_mux/input/teleop"/>
     <remap from="base_scan" to="scan"/>
   </node>
 

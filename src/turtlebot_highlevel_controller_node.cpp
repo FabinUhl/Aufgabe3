@@ -12,7 +12,7 @@
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "listener");
-  ros::NodeHandle nodeHandle("~");
+  ros::NodeHandle nodeHandle = ros::NodeHandle();
 
   HighlevelController::TurtlebotHighlevelController turtlebotHighlevelController(nodeHandle);
 

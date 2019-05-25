@@ -14,7 +14,8 @@
 #include <vector>
 #include <time.h>
 #include <geometry_msgs/Twist.h>
-
+#include <nav_msgs/Odometry.h>
+#include<visualization_msgs/Marker.h>
 namespace HighlevelController {
 
 /*!
@@ -60,11 +61,14 @@ class TurtlebotHighlevelController
                        std_srvs::Trigger::Response& response);
   */
  
+   void odomCallback(const nav_msgs::Odometry odomFrame);
+
   //! ROS node handle.
   ros::NodeHandle& nodeHandle_;
 
   //! ROS topic subscriber.
   ros::Subscriber subscriber_;
+  ros::Subscriber odom_subscriber_;
 
   //! ROS topic name to subscribe to.
   std::string subscriberTopic_;
@@ -74,7 +78,7 @@ class TurtlebotHighlevelController
 
   ros::Publisher cmd_vel_pub_;
   ros::Publisher publisher_;
-
+  ros::Publisher vis_pub_;
   //! Algorithm computation object.
   //Algorithm algorithm_;
 };
